@@ -1,7 +1,7 @@
 /**
  * 
  */
-package com.deviget.minesweeperserver;
+package com.deviget.minesweeperserver.api;
 
 /**
  * @author fernando

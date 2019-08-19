@@ -1,7 +1,7 @@
 /**
  * 
  */
-package com.deviget.minesweeperserver;
+package com.deviget.minesweeperserver.api;
 
 import java.io.Serializable;
 import java.time.Duration;
@@ -21,8 +21,8 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.deviget.minesweeperserver.Game.Cell.Coordinates;
-import com.deviget.minesweeperserver.Game.Cell.FlaggedStatus;
+import com.deviget.minesweeperserver.api.Game.Cell.Coordinates;
+import com.deviget.minesweeperserver.api.Game.Cell.FlaggedStatus;
 
 /**
  * @author fernando
@@ -30,6 +30,8 @@ import com.deviget.minesweeperserver.Game.Cell.FlaggedStatus;
  */
 class Game implements Serializable {
 
+	/* INTERNAL IMPLEMENTATION */
+	
 	/**
 	 * 
 	 */
@@ -48,7 +50,7 @@ class Game implements Serializable {
 	/**
 	 * Auto-generated
 	 */
-	private long id;
+	private Long id;
 	
 	/**
 	 * Number of rows
@@ -112,8 +114,8 @@ class Game implements Serializable {
 		TOP_LEFT, TOP_MIDDLE, TOP_RIGHT, LEFT_MIDDLE, RIGHT_MIDDLE, BOTTOM_LEFT, BOTTOM_MIDDLE, BOTTOM_RIGHT
 	}
 	
-	static class Cell {		
-		
+	static class Cell  {
+
 		private final Coordinates coordinates;
 
 		private boolean isRevealed;
@@ -225,7 +227,7 @@ class Game implements Serializable {
 		/**
 		 * @return the isRevealed
 		 */
-		boolean isRevealed() {
+		public boolean isRevealed() {
 			return isRevealed;
 		}
 
@@ -239,7 +241,7 @@ class Game implements Serializable {
 		/**
 		 * @return the flaggedStatus
 		 */
-		FlaggedStatus getFlaggedStatus() {
+		public FlaggedStatus getFlaggedStatus() {
 			return flaggedStatus;
 		}
 
@@ -253,7 +255,7 @@ class Game implements Serializable {
 		/**
 		 * @return the coordinates
 		 */
-		Coordinates getCoordinates() {
+		public Coordinates getCoordinates() {
 			return coordinates;
 		}
 
@@ -269,6 +271,13 @@ class Game implements Serializable {
 		 */
 		short getAdjMinesNumber() {
 			return adjMinesNumber;
+		}
+		
+		/**
+		 * @return the adjMinesNumber if cell is revealed
+		 */
+		public short getAdjMinesNumberRev() {
+			return (isRevealed ? adjMinesNumber : 0);
 		}
 		
 		Cell getClone() {
@@ -347,13 +356,13 @@ class Game implements Serializable {
 		/**
 		 * @return the status
 		 */
-		Game.Status getStatus() {
+		public Game.Status getStatus() {
 			return status;
 		}
 		/**
 		 * @return the adjCellsRevealed
 		 */
-		Set<Cell> getAdjCellsRevealed() {
+		public Set<Cell> getAdjCellsRevealed() {
 			return adjCellsRevealed;
 		}		
 		
@@ -434,50 +443,85 @@ class Game implements Serializable {
 		return relCells;
 
 	}
+	
+	/* EXPOSED API */
+	
+	/**
+	 * @return the id
+	 */
+	public Long getId() {
+		return id;
+	}
 
 	/**
 	 * @return the rows
 	 */
-	short getRows() {
+	public short getRows() {
 		return rows;
 	}
 	
 	/**
 	 * @return the columns
 	 */
-	short getColumns() {
+	public short getColumns() {
 		return columns;
 	}	
 
 	/**
 	 * @return the mines
 	 */
-	int getMines() {
+	public int getMines() {
 		return mines;
 	}
 
-	/**
-	 * @return Cell list (cloned from originals, so their state cannot be affected)
-	 */
-	List<Cell> getCells() {
-		return cells.values().stream()
-				.map(Cell::getClone)
-				.collect(Collectors.toList());
+	Cell getCellByCoordinates(Cell.Coordinates cellCoord) {
+		return cells.get(cellCoord).getClone();
 	}
 	
 	/**
+	 * @return Cell list (cloned from originals, so their state cannot be affected)
+	 */	
+	public List<Cell> getCells() {
+		return cells.values().stream()
+				.map(Cell::getClone)
+				.collect(Collectors.toList());
+	}	
+	
+	/**
+	 * @return the status
+	 */
+	public Status getStatus() {
+		return status;
+	}
+
+	/**
+	 * @return the startedAt
+	 */
+	public LocalTime getStartedAt() {
+		return startedAt;
+	}
+
+	/**
+	 * @return the timePlayed
+	 */
+	public Duration getTimePlayed() {
+		return timePlayed;
+	}
+
+	/**
 	 * @param cellCoord
 	 * @return
+	 * @throws WrongParametersException 
 	 * @throws MineRevealedException
 	 * 
 	 * Reveals cell and if isn't a mine and hasn't adjacent ones
 	 * returns list of additional revealed cells 
 	 * @throws GameWonException 
 	 */
-	RevealResult revealCell(Cell.Coordinates cellCoord) {
+	RevealResult revealCell(Cell.Coordinates cellCoord) throws WrongParametersException {
 		Cell cell = cells.get(cellCoord);
 		if(cell == null) {
-			throw new IllegalArgumentException("Wrong cell coordinates"); 
+			throw new WrongParametersException("Wrong cell coordinates"); 
 		}
 		
 		Set<Cell> adjCellsRev = new HashSet<>();
@@ -517,13 +561,19 @@ class Game implements Serializable {
 					adjCellEntry -> {
 						//check that it hasn't been revealed already
 						if(adjCellEntry.getValue() != null && !adjCellEntry.getValue().isRevealed) {
-							LOGGER.debug("Revealing adj Cell at " + cell.coordinates);
-							RevealResult adjRevRes = revealCell(adjCellEntry.getValue().getCoordinates());
-							//if game is won by revealing this adjacent cell stop processing
-						    if(adjRevRes.getStatus() == Game.Status.WON) {
-						    	throw new GameWonException(); 
-						    }
-							adjCellsRev.addAll(adjRevRes.getAdjCellsRevealed());							
+							adjCellsRev.add(adjCellEntry.getValue());
+							LOGGER.debug("Revealing adj Cell at " + cell.coordinates);							
+							try {
+								RevealResult adjRevRes = revealCell(adjCellEntry.getValue().getCoordinates());
+								adjCellsRev.addAll(adjRevRes.getAdjCellsRevealed());
+								//if game is won by revealing this adjacent cell stop processing
+							    if(adjRevRes.getStatus() == Game.Status.WON) {
+							    	throw new GameWonException(); 
+							    }
+							} catch (WrongParametersException e) {
+								//this should never happen
+								LOGGER.error("Game internal consistency error " + e.getMessage());
+							}														
 						}
 					});				
 			} else {
@@ -536,6 +586,33 @@ class Game implements Serializable {
 			
 		return new RevealResult(Game.Status.STARTED, adjCellsRev);
 		
+	}
+	
+	void flagCell(Cell.Coordinates cellCoord) throws WrongParametersException {
+		Cell cell = cells.get(cellCoord);
+		if(cell == null) {
+			throw new WrongParametersException("Wrong cell coordinates"); 
+		}
+		if(cell.isRevealed()) {
+			throw new WrongParametersException("Can't flag a revealed cell"); 
+		}
+		
+		synchronized(this) {			
+			switch(cell.getFlaggedStatus()) {
+				case NON_FLAGGED:
+					cell.setFlaggedStatus(FlaggedStatus.RED_FLAG);
+					break;
+				case RED_FLAG:
+					cell.setFlaggedStatus(FlaggedStatus.QUESTION_MARK);
+					break;
+				case QUESTION_MARK:
+					cell.setFlaggedStatus(FlaggedStatus.NON_FLAGGED);
+					break;				
+				default:
+					break;
+			}
+		}
+
 	}
 
 	/* (non-Javadoc)
@@ -604,20 +681,21 @@ class Game implements Serializable {
 	 * @param columns - Must be greater than 2
 	 * @param mines - Positive value, number of mines must not exceed half of total cells.
 	 * @return
+	 * @throws WrongParametersException 
 	 */
-	static Game createGame(short rows, short columns, int mines) {
+	static Game createGame(short rows, short columns, int mines) throws WrongParametersException {
 		
 		//check arguments
 		if(rows < 2) {
-			throw new IllegalArgumentException("Number of rows must be greater than 2");
+			throw new WrongParametersException("Number of rows must be greater than 2");
 		}
 		if(columns < 2) {
-			throw new IllegalArgumentException("Number of columns must be greater than 2");
+			throw new WrongParametersException("Number of columns must be greater than 2");
 		}
 		int cellsNumber = rows * columns;
 		int maxNumMinesAllowed = cellsNumber / 2;
 		if(mines > maxNumMinesAllowed) {
-			throw new IllegalArgumentException("Number of mines must not be greater than " + maxNumMinesAllowed);
+			throw new WrongParametersException("Number of mines must not be greater than " + maxNumMinesAllowed);
 		}		
 		
 		//initial game state

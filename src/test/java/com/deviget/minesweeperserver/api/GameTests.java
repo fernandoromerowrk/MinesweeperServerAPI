@@ -1,4 +1,4 @@
-package com.deviget.minesweeperserver;
+package com.deviget.minesweeperserver.api;
 
 import static org.junit.Assert.assertEquals;
 
@@ -8,8 +8,10 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import com.deviget.minesweeperserver.Game.Cell;
-import com.deviget.minesweeperserver.Game.RevealResult;
+import com.deviget.minesweeperserver.api.Game;
+import com.deviget.minesweeperserver.api.Game.Cell;
+import com.deviget.minesweeperserver.api.Game.Cell.FlaggedStatus;
+import com.deviget.minesweeperserver.api.Game.RevealResult;
 
 public class GameTests {
 	
@@ -17,7 +19,7 @@ public class GameTests {
 	public ExpectedException exception = ExpectedException.none();
 	
 	@Test
-	public void whenMineRevealedThenGameLost() {
+	public void whenMineRevealedThenGameIsLost() throws WrongParametersException {
 		short rows = 3;
 		short columns = 3;
 		int mines = 2;
@@ -32,7 +34,7 @@ public class GameTests {
 	}
 	
 	@Test
-	public void whenCellwithNoAdjMinesThenRevealAdjacentOnes() {
+	public void whenCellwithNoAdjMinesThenRevealAdjacentOnes() throws WrongParametersException {
 		short rows = 4;
 		short columns = 4;
 		int mines = 2;
@@ -62,7 +64,7 @@ public class GameTests {
 	}
 	
 	@Test()
-	public void whenAllCellwithNoAdjMinesRevealedWinGame() {
+	public void whenAllCellWithNoAdjMinesRevealedThenGameIsWon() throws WrongParametersException {
 		short rows = 8;
 		short columns = 8;
 		int mines = 25;
@@ -89,6 +91,46 @@ public class GameTests {
 		
 		assertEquals(Game.Status.WON, result.getStatus());
 		
+	}
+	
+	@Test()
+	public void whenNonRevealedCellIsFlaggedThenCellHasRedFlagStatus() throws WrongParametersException {
+		short rows = 3;
+		short columns = 3;
+		int mines = 3;
+		Game game = Game.createGame(rows, columns, mines);
+		//initial game status		
+		System.out.println(game);
+		//get a non-revealed cell location
+		Optional<Cell> cellOpt = game.getCells().stream().filter(
+			cell -> !cell.isHasMine() && !cell.isRevealed()).findFirst();
+		Cell nonRevCell = cellOpt.get();
+		System.out.println("About to flag cell at " + nonRevCell.getCoordinates());
+		game.flagCell(nonRevCell.getCoordinates());
+		//new game status
+		System.out.println(game);		
+		assertEquals(FlaggedStatus.RED_FLAG, game.getCellByCoordinates(nonRevCell.getCoordinates()).getFlaggedStatus());
+	}
+	
+	@Test()
+	public void whenRedFlaggedCellIsFlaggedThenCellHasQuestionMarkFlagStatus() throws WrongParametersException {
+		short rows = 3;
+		short columns = 3;
+		int mines = 3;
+		Game game = Game.createGame(rows, columns, mines);
+		//initial game status		
+		System.out.println(game);
+		//get a non-revealed cell location
+		Optional<Cell> cellOpt = game.getCells().stream().filter(
+			cell -> !cell.isHasMine() && !cell.isRevealed()).findFirst();
+		Cell nonRevCell = cellOpt.get();
+		System.out.println("About to flag cell at " + nonRevCell.getCoordinates());
+		game.flagCell(nonRevCell.getCoordinates());
+		System.out.println("About to flag again cell at " + nonRevCell.getCoordinates());
+		game.flagCell(nonRevCell.getCoordinates());
+		//new game status
+		System.out.println(game);		
+		assertEquals(FlaggedStatus.QUESTION_MARK, game.getCellByCoordinates(nonRevCell.getCoordinates()).getFlaggedStatus());
 	}
 
 }
