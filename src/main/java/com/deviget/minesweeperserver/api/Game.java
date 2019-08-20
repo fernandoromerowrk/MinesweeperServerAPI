@@ -5,11 +5,12 @@ package com.deviget.minesweeperserver.api;
 
 import java.io.Serializable;
 import java.time.Duration;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
@@ -36,6 +37,10 @@ class Game implements Serializable {
 
 	/* INTERNAL IMPLEMENTATION */
 	
+	private static final String ILLEGAL_GAME_STATE_MSG = "Illegal game state";
+
+	private static final String WRONG_CELL_COORDINATES_MSG = "Wrong cell coordinates";
+
 	/**
 	 * 
 	 */
@@ -87,13 +92,13 @@ class Game implements Serializable {
 	 * Creation date, for tracking time-to-live
 	 * if game was never started
 	 */
-	private LocalTime createdAt;
+	private LocalDateTime createdAt;
 	
 	/**
-	 * Start date, for tracking play time elapse
+	 * Start dateTime, for tracking play time elapse
 	 * Tracked when first cell is revealed
 	 */
-	private LocalTime startedAt;
+	private LocalDateTime startedAt;
 	
 	/**
 	 * Total time in seconds played
@@ -106,6 +111,7 @@ class Game implements Serializable {
 		* use principal login to track games per accounts		*
 		*/
 		this.createdBy = "ANONYMOUS";
+		this.createdAt = LocalDateTime.now();
 		this.status = Status.CREATED;
 		this.id = ObjectId.get();
 		this.cells = new HashMap<>();
@@ -370,14 +376,17 @@ class Game implements Serializable {
 	 */
 	class RevealResult {
 		private final Game.Status status;
+		private long timePlayedInSeconds;
 		private final Set<Cell> adjCellsRevealed;
 		/**
 		 * @param status
+		 * @param timePlayedInSeconds 
 		 * @param adjCellsRevealed
 		 */
-		RevealResult(Status status, Set<Cell> adjCellsRevealed) {
+		RevealResult(Status status, long timePlayedInSeconds, Set<Cell> adjCellsRevealed) {
 			super();
 			this.status = status;
+			this.timePlayedInSeconds = timePlayedInSeconds;
 			this.adjCellsRevealed = adjCellsRevealed;
 		}
 		/**
@@ -385,6 +394,12 @@ class Game implements Serializable {
 		 */
 		public Game.Status getStatus() {
 			return status;
+		}		
+		/**
+		 * @return the timePlayedInSeconds
+		 */
+		public long getTimePlayedInSeconds() {
+			return timePlayedInSeconds;
 		}
 		/**
 		 * @return the adjCellsRevealed
@@ -524,7 +539,7 @@ class Game implements Serializable {
 	/**
 	 * @return the startedAt
 	 */
-	public LocalTime getStartedAt() {
+	public LocalDateTime getStartedAt() {
 		return startedAt;
 	}
 
@@ -544,27 +559,35 @@ class Game implements Serializable {
 	 * returns list of additional revealed cells (or mines if game's lost)
 	 */
 	RevealResult revealCell(Cell.Coordinates cellCoord) throws WrongParametersException {
+		
+		//check game status
+		if(this.status != Game.Status.CREATED && this.status != Game.Status.STARTED) {
+			throw new IllegalArgumentException(Game.ILLEGAL_GAME_STATE_MSG);
+		}
+		//check cell
 		Cell cell = cells.get(cellCoord);
 		if(cell == null) {
-			throw new WrongParametersException("Wrong cell coordinates"); 
+			throw new WrongParametersException(Game.WRONG_CELL_COORDINATES_MSG); 
 		}
 		
-		Set<Cell> adjCellsRev = new HashSet<>();
-		
+		Set<Cell> adjCellsRev = new HashSet<>();		
 		//check-then-act semantics
 		try {
 			synchronized(this) {
+				
+				startGameIfApplicable();
+				
 				if(cell.hasMine) {
+					
 					this.status = Game.Status.LOST;
+					//set time played until defeat
+					this.timePlayed = Duration.between(this.startedAt, LocalDateTime.now());					
 					//collect al mine cells now that everything is lost
 					this.cells.values().stream()
 						.filter(gCell -> gCell.isHasMine())
 						.forEach(gCell -> adjCellsRev.add(gCell));
-					return new RevealResult(Game.Status.LOST, adjCellsRev);
-				}
-				if(this.status != Game.Status.STARTED) {
-					this.status = Game.Status.STARTED;
-				}
+					return new RevealResult(Game.Status.LOST, this.timePlayed.getSeconds(), adjCellsRev);
+				}				
 				
 				cell.isRevealed = true;
 				//resets flagged status if appropiate
@@ -588,45 +611,75 @@ class Game implements Serializable {
 				LOGGER.debug("Cell " + cell.coordinates + " has no adj mines, revealing adj cells as well!");
 				this.getAdjacentCells(cell).entrySet().stream().forEach(
 					adjCellEntry -> {
-						//check that it hasn't been revealed already
-						if(adjCellEntry.getValue() != null && !adjCellEntry.getValue().isRevealed) {
-							adjCellsRev.add(adjCellEntry.getValue());
-							LOGGER.debug("Revealing adj Cell at " + cell.coordinates);							
-							try {
-								RevealResult adjRevRes = revealCell(adjCellEntry.getValue().getCoordinates());
-								adjCellsRev.addAll(adjRevRes.getAdjCellsRevealed());
-								//if game is won by revealing this adjacent cell stop processing
-							    if(adjRevRes.getStatus() == Game.Status.WON) {
-							    	throw new GameWonException(); 
-							    }
-							} catch (WrongParametersException e) {
-								//this should never happen
-								LOGGER.error("Game internal consistency error " + e.getMessage());
-							}														
-						}
+						revealAdjCellToCell(cell, adjCellsRev, adjCellEntry);
 					});				
 			} else {
 				LOGGER.debug("Cell " + cell.coordinates + " has adj mines, no revealing adjacent ones!");
 			}
 		} catch (GameWonException e) {
+			//set time played until win
+			this.timePlayed = Duration.between(this.startedAt, LocalDateTime.now());
 			this.status = Game.Status.WON;
-			return new RevealResult(Game.Status.WON, adjCellsRev);			
+			return new RevealResult(Game.Status.WON, this.timePlayed.getSeconds(), adjCellsRev);			
 		}
 			
-		return new RevealResult(Game.Status.STARTED, adjCellsRev);
+		//set time played so far
+		this.timePlayed = Duration.between(this.startedAt, LocalDateTime.now());
+		return new RevealResult(Game.Status.STARTED, this.timePlayed.getSeconds(), adjCellsRev);
 		
+	}
+
+	/**
+	 * @param cell
+	 * @param adjCellsRevAccum
+	 * @param adjCellEntry
+	 */
+	private void revealAdjCellToCell(Cell cell, Set<Cell> adjCellsRevAccum, Entry<RelativePosition, Cell> adjCellEntry) {
+		//check that it hasn't been revealed already
+		if(adjCellEntry.getValue() != null && !adjCellEntry.getValue().isRevealed) {
+			adjCellsRevAccum.add(adjCellEntry.getValue());
+			LOGGER.debug("Revealing adj Cell at " + cell.coordinates);							
+			try {
+				RevealResult adjRevRes = revealCell(adjCellEntry.getValue().getCoordinates());
+				adjCellsRevAccum.addAll(adjRevRes.getAdjCellsRevealed());
+				//if game is won by revealing this adjacent cell stop processing
+			    if(adjRevRes.getStatus() == Game.Status.WON) {
+			    	throw new GameWonException(); 
+			    }
+			} catch (WrongParametersException e) {
+				//this should never happen
+				LOGGER.error("Game internal consistency error " + e.getMessage());
+			}														
+		}
+	}
+
+	/**
+	 * 
+	 */
+	private void startGameIfApplicable() {
+		if(this.status != Game.Status.STARTED) {
+			this.status = Game.Status.STARTED;
+			this.startedAt = LocalDateTime.now();
+		}
 	}
 	
 	void flagCell(Cell.Coordinates cellCoord) throws WrongParametersException {
+		
+		//check game status
+		if(this.status != Game.Status.CREATED && this.status != Game.Status.STARTED) {
+			throw new IllegalArgumentException(Game.ILLEGAL_GAME_STATE_MSG);
+		}
+		//check cell
 		Cell cell = cells.get(cellCoord);
 		if(cell == null) {
-			throw new WrongParametersException("Wrong cell coordinates"); 
+			throw new WrongParametersException(Game.WRONG_CELL_COORDINATES_MSG); 
 		}
 		if(cell.isRevealed()) {
 			throw new WrongParametersException("Can't flag a revealed cell"); 
 		}
 		
-		synchronized(this) {			
+		synchronized(this) {
+			startGameIfApplicable();
 			switch(cell.getFlaggedStatus()) {
 				case NON_FLAGGED:
 					cell.setFlaggedStatus(FlaggedStatus.RED_FLAG);
