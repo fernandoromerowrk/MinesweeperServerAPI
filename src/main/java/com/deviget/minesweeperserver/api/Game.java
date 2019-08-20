@@ -14,12 +14,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.PersistenceConstructor;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import com.deviget.minesweeperserver.api.Game.Cell.Coordinates;
 import com.deviget.minesweeperserver.api.Game.Cell.FlaggedStatus;
@@ -28,6 +31,7 @@ import com.deviget.minesweeperserver.api.Game.Cell.FlaggedStatus;
  * @author fernando
  *
  */
+@Document
 class Game implements Serializable {
 
 	/* INTERNAL IMPLEMENTATION */
@@ -41,16 +45,13 @@ class Game implements Serializable {
 	
 	static final Duration MAX_DURATION = Duration.ofSeconds(999L);
 	
-	private static final AtomicLong ID_GENERATOR = new AtomicLong(0);
-	
 	private static final Random rnd = new Random();
-	
-	
 	
 	/**
 	 * Auto-generated
 	 */
-	private Long id;
+	@Id
+	private ObjectId id;
 	
 	/**
 	 * Number of rows
@@ -106,9 +107,35 @@ class Game implements Serializable {
 		*/
 		this.createdBy = "ANONYMOUS";
 		this.status = Status.CREATED;
-		this.id = Game.ID_GENERATOR.incrementAndGet();
+		this.id = ObjectId.get();
 		this.cells = new HashMap<>();
 	}
+		
+	/**
+	 * @param id
+	 * @param rows
+	 * @param columns
+	 * @param mines
+	 * @param cells
+	 * @param status
+	 * @param createdBy
+	 * @param createdAt
+	 * @param startedAt
+	 * @param timePlayed
+	 */
+	@PersistenceConstructor
+	Game(ObjectId id, short rows, short columns, int mines, Map<Cell.Coordinates, Cell> cells, Status status,
+			String createdBy) {
+		super();
+		this.id = id;
+		this.rows = rows;
+		this.columns = columns;
+		this.mines = mines;
+		this.cells = cells;
+		this.status = status;
+		this.createdBy = createdBy;
+	}	
+	
 	
 	enum RelativePosition {
 		TOP_LEFT, TOP_MIDDLE, TOP_RIGHT, LEFT_MIDDLE, RIGHT_MIDDLE, BOTTOM_LEFT, BOTTOM_MIDDLE, BOTTOM_RIGHT
@@ -216,9 +243,9 @@ class Game implements Serializable {
 		 * @param coordinates
 		 * @param hasMine
 		 */
-		Cell(Coordinates coordinate, boolean hasMine) {
+		Cell(Coordinates coordinates, boolean hasMine) {
 			super();
-			this.coordinates = coordinate;
+			this.coordinates = coordinates;
 			this.hasMine = hasMine;
 			this.isRevealed = false;
 			this.flaggedStatus = FlaggedStatus.NON_FLAGGED;
@@ -449,10 +476,10 @@ class Game implements Serializable {
 	/**
 	 * @return the id
 	 */
-	public Long getId() {
-		return id;
-	}
-
+	public String getId() {
+		return id.toHexString();
+	}	
+	
 	/**
 	 * @return the rows
 	 */
@@ -480,7 +507,7 @@ class Game implements Serializable {
 	
 	/**
 	 * @return Cell list (cloned from originals, so their state cannot be affected)
-	 */	
+	 */
 	public List<Cell> getCells() {
 		return cells.values().stream()
 				.map(Cell::getClone)
@@ -512,11 +539,9 @@ class Game implements Serializable {
 	 * @param cellCoord
 	 * @return
 	 * @throws WrongParametersException 
-	 * @throws MineRevealedException
 	 * 
 	 * Reveals cell and if isn't a mine and hasn't adjacent ones
-	 * returns list of additional revealed cells 
-	 * @throws GameWonException 
+	 * returns list of additional revealed cells (or mines if game's lost)
 	 */
 	RevealResult revealCell(Cell.Coordinates cellCoord) throws WrongParametersException {
 		Cell cell = cells.get(cellCoord);
@@ -531,6 +556,10 @@ class Game implements Serializable {
 			synchronized(this) {
 				if(cell.hasMine) {
 					this.status = Game.Status.LOST;
+					//collect al mine cells now that everything is lost
+					this.cells.values().stream()
+						.filter(gCell -> gCell.isHasMine())
+						.forEach(gCell -> adjCellsRev.add(gCell));
 					return new RevealResult(Game.Status.LOST, adjCellsRev);
 				}
 				if(this.status != Game.Status.STARTED) {
