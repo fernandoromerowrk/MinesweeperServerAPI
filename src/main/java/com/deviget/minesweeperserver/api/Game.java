@@ -581,7 +581,7 @@ class Game implements Serializable {
 					
 					this.status = Game.Status.LOST;
 					//set time played until defeat
-					this.timePlayed = Duration.between(this.startedAt, LocalDateTime.now());					
+					updateTimePlayed();					
 					//collect al mine cells now that everything is lost
 					this.cells.values().stream()
 						.filter(gCell -> gCell.isHasMine())
@@ -617,16 +617,21 @@ class Game implements Serializable {
 				LOGGER.debug("Cell " + cell.coordinates + " has adj mines, no revealing adjacent ones!");
 			}
 		} catch (GameWonException e) {
-			//set time played until win
-			this.timePlayed = Duration.between(this.startedAt, LocalDateTime.now());
+			updateTimePlayed();
 			this.status = Game.Status.WON;
 			return new RevealResult(Game.Status.WON, this.timePlayed.getSeconds(), adjCellsRev);			
 		}
 			
-		//set time played so far
-		this.timePlayed = Duration.between(this.startedAt, LocalDateTime.now());
+		updateTimePlayed();
 		return new RevealResult(Game.Status.STARTED, this.timePlayed.getSeconds(), adjCellsRev);
 		
+	}
+
+	/**
+	 * 
+	 */
+	private void updateTimePlayed() {
+		this.timePlayed = Duration.between(this.startedAt, LocalDateTime.now());
 	}
 
 	/**
@@ -694,6 +699,7 @@ class Game implements Serializable {
 					break;
 			}
 		}
+		updateTimePlayed();
 
 	}
 
