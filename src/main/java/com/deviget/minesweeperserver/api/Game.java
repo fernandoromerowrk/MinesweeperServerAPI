@@ -614,6 +614,8 @@ class Game implements Serializable {
 						revealAdjCellToCell(cell, adjCellsRev, adjCellEntry);
 					});				
 			} else {
+				//add current cell so player can get adj mines info
+				adjCellsRev.add(cell);
 				LOGGER.debug("Cell " + cell.coordinates + " has adj mines, no revealing adjacent ones!");
 			}
 		} catch (GameWonException e) {

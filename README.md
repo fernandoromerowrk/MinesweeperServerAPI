@@ -13,6 +13,7 @@
 * Spring Data was used to quickly develop a game repository.
 * Quartz job scheduling framework was chosen in order to later configure a job which checks for expired games (maximum playing time exceeded).
 * Project architecture is backed by Spring Boot framework.
+* API documentation is exposed via Swagger
 
 ### Requirements coverage
 * Persistence was configured with an embedded MongoDB but it's not being used.
@@ -22,3 +23,10 @@
 * Ability to select the game parameters: number of rows, columns, and mines. Although it's
 lower priority accommodating that feature posed no considerable delay during development.
 * Ability to support multiple users/accounts not done.
+
+### Usage instructions
+All endpoint information is conveniently exposed on (deployment url)/swagger-ui.html.
+* To create a game make a POST to (deployment url)/games using params "columns", "rows" and "mines". You'll get a JSON response with all created game data detailing all composing cells status.
+* With generated game id you can now make a PUT to (deployment url)/games/{gameId/cells/reveal using params "column" and "row" to identify cell to be revealed. You'll get a JSON response with resulting Game Status from move (WIN, LOST, STARTED if you can keep playing)
+and adjacent cells that could be revealed (and current cell as well) with corresponding number of surrounding mines info. When game is LOST cell information pertains to all mine cells.
+* With generated game id you can now make a PUT to (deployment url)/games/{gameId/cells/flag using params "column" and "row" to flag a cell. Flagging status changes considering current flag status as detailed in Design considerations section.
