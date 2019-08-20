@@ -31,6 +31,7 @@ public class GameTests {
 		System.out.println("About to reveal cell at " + mineCellOpt.get().getCoordinates());
 		RevealResult result = game.revealCell(mineCellOpt.get().getCoordinates());
 		assertEquals(Game.Status.LOST, result.getStatus());
+		System.out.println(result.getAdjCellsRevealed());
 	}
 	
 	@Test
