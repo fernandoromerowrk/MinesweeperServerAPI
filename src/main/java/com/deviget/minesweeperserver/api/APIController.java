@@ -3,8 +3,8 @@
  */
 package com.deviget.minesweeperserver.api;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,7 +28,7 @@ import com.deviget.minesweeperserver.api.Game.RevealResult;
 @RequestMapping(value={"/games"})
 public class APIController {
 	
-	private static final Map<String, Game> GAMES_CREATED = new HashMap<>();
+	private static final Map<String, Game> GAMES_CREATED = new ConcurrentHashMap<>();
 	private static final String GAME_DOESNT_EXIST_MSG = "Game doesn't exist";
 	
 	@PostMapping(value = "")
@@ -63,9 +63,11 @@ public class APIController {
 			if(game == null) {
 				throw new WrongParametersException(APIController.GAME_DOESNT_EXIST_MSG);
 			}
-			RevealResult revealResult = game.revealCell(new Game.Cell.Coordinates(row, column));			
-			if(revealResult.getStatus() != Game.Status.STARTED) {
-				GAMES_CREATED.remove(gameId);
+			RevealResult revealResult = game.revealCell(new Game.Cell.Coordinates(row, column));
+			synchronized(APIController.class) {
+				if(revealResult.getStatus() != Game.Status.STARTED) {
+					GAMES_CREATED.remove(gameId);
+				}
 			}
 			return  ResponseEntity.ok().body(revealResult);
 		} catch (WrongParametersException ex) {

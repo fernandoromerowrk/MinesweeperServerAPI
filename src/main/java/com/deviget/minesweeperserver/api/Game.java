@@ -604,19 +604,20 @@ class Game implements Serializable {
 				} else {
 					LOGGER.debug("Found non-revealed cell at " + nonRevCellOpt.get().getCoordinates());
 				}
-			}	
+				
 			
-			//reveals adjacent cells if no adjacent mines present
-			if(cell.adjMinesNumber == 0) {
-				LOGGER.debug("Cell " + cell.coordinates + " has no adj mines, revealing adj cells as well!");
-				this.getAdjacentCells(cell).entrySet().stream().forEach(
-					adjCellEntry -> {
-						revealAdjCellToCell(cell, adjCellsRev, adjCellEntry);
-					});				
-			} else {
-				//add current cell so player can get adj mines info
-				adjCellsRev.add(cell);
-				LOGGER.debug("Cell " + cell.coordinates + " has adj mines, no revealing adjacent ones!");
+				//reveals adjacent cells if no adjacent mines present
+				if(cell.adjMinesNumber == 0) {
+					LOGGER.debug("Cell " + cell.coordinates + " has no adj mines, revealing adj cells as well!");
+					this.getAdjacentCells(cell).entrySet().stream().forEach(
+						adjCellEntry -> {
+							revealAdjCellToCell(cell, adjCellsRev, adjCellEntry);
+						});				
+				} else {
+					//add current cell so player can get adj mines info
+					adjCellsRev.add(cell);
+					LOGGER.debug("Cell " + cell.coordinates + " has adj mines, no revealing adjacent ones!");
+				}
 			}
 		} catch (GameWonException e) {
 			updateTimePlayed();
